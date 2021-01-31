@@ -1,0 +1,29 @@
+{% load static %}
+
+<html>
+<head>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1" crossorigin="anonymous">
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body>
+<nav class="navbar navbar-dark bg-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/">Web Scraper</a>
+    </div>
+</nav>
+<div class="container">
+    <h2>Amazon Web Scrapper</h2>
+    <form action=" " method="POST" id="form1">
+        {% csrf_token %}
+        <label for="url">URL</label>
+        <input type="url" id="url" name="url" placeholder="Enter Product URL" required>
+        <label for="cost">Price</label>
+        <input type="number" id="cost" name="cost" placeholder="Enter Desired Amount" required>
+        <label for="mail">Email</label>
+        <input type="email" id="mail" name="mail" placeholder="Enter Email ID" required>
+    </form>
+    <button type="submit" form="form1" value="Submit">Submit</button>
+</div>
+</body>
+</html>

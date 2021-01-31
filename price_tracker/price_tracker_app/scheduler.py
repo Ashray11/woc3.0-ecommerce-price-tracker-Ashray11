@@ -1,0 +1,158 @@
+import logging
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+from django.conf import settings
+
+import sys
+# selenium
+from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException
+# email sending
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+# read csv files
+import pandas as pd
+import time
+
+# Create scheduler to run in a thread inside the application process
+scheduler = BackgroundScheduler(settings.SCHEDULER_CONFIG)
+
+
+def Scrap():
+    # Save last modified time log data
+    # timeLog = pd.read_csv(r'C:\Users\Hetal\PycharmProjects\woc3.0-ecommerce-price-tracker-ashray\lastModified.csv')
+    # timeLog.at[0, 'lastModified'] = str(round(time.time()))
+    # timeLog.to_csv('lastModified.csv', index=False)
+
+    # create webdriver object
+    options = webdriver.ChromeOptions()
+    options.headless = True
+    driver = webdriver.Chrome("C:\Program Files (x86)\chromedriver.exe", options=options)
+
+    URL = "https://www.amazon.in/ref=gw_pc_Echodevices_3/dp/B084KSRFXJ?pf_rd_r=5NQKWQR7XYPCS96CBKY8&pf_rd_p=6a6a9d72-e446-4f77-bb1c-625c5cfb1bbe"
+    myPrice = 1000
+    myEmail = "cagewot462@lovomon.com"
+    try:
+        driver.get(URL)
+    except:
+        return "Invalid URL. Try again :("
+    name = ""
+    website = ""
+    price = ""
+    available = True
+
+    # get element
+    if URL[12:20] == "flipkart":
+        # fixed class name for product name
+        element = driver.find_element_by_class_name("B_NuCI").text
+        name = element
+        # fixed class name for product price
+        element = driver.find_element_by_class_name("_16Jk6d").text
+        price = element
+        website = "Flipkart"
+
+    elif URL[12:18] == "amazon":
+        # Check availability
+        try:
+            element = driver.find_element_by_id("availability").text
+        except NoSuchElementException as exception:
+            available = False
+        if available:
+            # distinguish b/w deal of day and normal product
+            dayDeal = True
+            try:
+                # fixed class name if deal of day product
+                element = driver.find_element_by_id("priceblock_dealprice_lbl").text
+            except NoSuchElementException as exception:
+                # class does not exist means not deal of day product
+                dayDeal = False
+
+            # fixed class name for product name irrespective of deal of day or normal product
+            element = driver.find_element_by_id("productTitle").text
+            name = element
+            if dayDeal:
+                # if deal of day product then use corresponding id
+                element = driver.find_element_by_id("priceblock_dealprice").text
+                price = element
+            else:
+                # if normal product then use corresponding id
+                element = driver.find_element_by_id("priceblock_ourprice").text
+                price = element
+            website = "Amazon"
+        else:
+            return "Unavailable. Email will be sent when available within budget."
+
+    elif URL[12:20] == "snapdeal":
+        try:
+            element = driver.find_element_by_class_name("sold-out-err").text
+            available = False
+        except NoSuchElementException as exception:
+            available = True
+        if available:
+            # fixed class name for product name
+            element = driver.find_element_by_class_name("pdp-e-i-head").text
+            name = element
+            # fixed class name for product price
+            element = driver.find_element_by_class_name("payBlkBig").text
+            price = element
+            website = "Snapdeal"
+
+        else:
+            return "Unavailable. Email will be sent when available within budget."
+
+    else:
+        return "We dont work with this website :("
+
+    # send email if conditions are satisfied
+    if available and name != "" and price != "" and myPrice >= price and website != "":
+        mail_content = '''<pre>Hello Customer!<br>
+The product you looked for on %s is now available within your budget.<br>
+The datails are:
+    Name: %s
+    Price: %s
+    <a href="%s">LINK</a>
+    </pre>''' % (website, name, price, URL)
+        # The mail addresses and password
+        validation = pd.read_csv(r'C:\Users\Hetal\PycharmProjects\woc3.0-ecommerce-price-tracker-ashray\validation.csv')
+        sender_address = validation["Email"][0]
+        sender_pass = validation["Pass"][0]
+        receiver_address = myEmail
+        # Setup the MIME
+        message = MIMEMultipart()
+        message['From'] = sender_address
+        message['To'] = receiver_address
+        message['Subject'] = 'Product available within budget!'  # The subject line
+        # The body and the attachments for the mail
+        message.attach(MIMEText(mail_content, 'html'))
+
+        # Create SMTP session for sending the mail
+        session = smtplib.SMTP('smtp.gmail.com', 587)  # use gmail with port
+        session.starttls()  # enable security
+        session.login(sender_address, sender_pass)  # login with mail_id and password
+        text = message.as_string()
+        session.sendmail(sender_address, receiver_address, text)
+        session.quit()
+
+        print('Mail Sent')
+        return "Mail Sent"
+    return "False"
+
+
+def start():
+    if settings.DEBUG:
+        # Hook into the apscheduler logger
+        logging.basicConfig()
+        logging.getLogger('apscheduler').setLevel(logging.DEBUG)
+
+    # Adding this job here instead of to crons.
+    # This will do the following:
+    # - Add a scheduled job to the job store on application initialization
+    # - The job will execute a model class method at midnight each day
+    # - replace_existing in combination with the unique ID prevents duplicate copies of the job
+    scheduler.add_job(Scrap, trigger=CronTrigger(hour="*/12"), id="my_class_method",
+                      max_instances=1,
+                      replace_existing=True)
+    scheduler.start()
